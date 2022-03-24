@@ -281,7 +281,7 @@ impl Application for Rokit {
                 self.server_tcp_port_text_input = s;
             },
             RokitMessage::ServerTCPButton => {
-                self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_DISCONNECT)
+                self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_DISCONNECT);
             },
             RokitMessage::ServerUDPIPTextInput(s) => {
                 self.server_udp_ip_text_input = s;
@@ -290,7 +290,7 @@ impl Application for Rokit {
                 self.server_udp_port_text_input = s;
             },
             RokitMessage::ServerUDPButton => {
-                self.server_udp_button_text = String::from(SERVER_UDP_BUTTON_TEXT_DISCONNECT)
+                self.server_udp_button_text = String::from(SERVER_UDP_BUTTON_TEXT_DISCONNECT);
             },
 
             RokitMessage::ClientIPTextInput(s) => {
@@ -310,7 +310,7 @@ impl Application for Rokit {
                         match tcp_client {
                             Ok(c) => {
                                 self.tcp_client = Some(c);
-                                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT)
+                                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
                             },
                             Err(e) => {
                                 self.client_output_text += "创建Socket错误:";
@@ -322,19 +322,19 @@ impl Application for Rokit {
                 }
             },
             RokitMessage::ClientUDPButton => {
-                self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_DISCONNECT)
+                self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_DISCONNECT);
             },
             RokitMessage::AddrMessage(i, addr_message) => {
                 match self.addrs.get_mut(i) {
                     Some(addr) => {
-                        addr.update(addr_message)
+                        addr.update(addr_message);
                     },
                     None => {}
                 }
             },
             RokitMessage::ServerAllButton => {
                 for addr in self.addrs.iter_mut() {
-                    addr.check_state = AddrState::Checked
+                    addr.check_state = AddrState::Checked;
                 }
             },
             RokitMessage::ServerDisconnectButton => {
@@ -351,7 +351,7 @@ impl Application for Rokit {
                 self.server_output_text += ("\n".to_string() + self.server_buffer_text_input.clone().as_str()).as_str();
             },
             RokitMessage::ServerASCIISendButton => {
-                println!("已发送{}", self.server_ascii_buffer_text_input)
+                println!("已发送{}", self.server_ascii_buffer_text_input);
             },
             RokitMessage::ClientBufferTextInput(s) => {
                 self.client_buffer_text_input = s;
@@ -373,7 +373,7 @@ impl Application for Rokit {
                 } 
             },
             RokitMessage::ClientASCIISendButton => {
-                println!("已发送{}", self.client_ascii_buffer_text_input)
+                println!("已发送{}", self.client_ascii_buffer_text_input);
             },
         }
         Command::none()
