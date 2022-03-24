@@ -5,6 +5,12 @@ pub struct TcpClient {
     tcp:TcpStream
 }
 
+impl Clone for TcpClient {
+    fn clone(&self) -> Self {
+        Self { socket: self.socket.clone(), tcp: self.tcp.try_clone().unwrap() }
+    }
+}
+
 impl TcpClient {
     pub fn connect(ip:String, port:String) -> Result<Self, RokitError> {
         let split_ip : Vec<&str> = ip.as_str().split(".").collect();
