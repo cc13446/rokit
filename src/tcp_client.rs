@@ -30,10 +30,6 @@ impl TcpClient {
             let tcp = TcpStream::connect(socket_addr);
             match tcp {
                 Ok(t) => {
-                    match t.set_nonblocking(true) {
-                        Ok(_) => {},
-                        Err(e) => return Err(RokitError::new_msg("TCP创建错误:".to_string() + e.to_string().as_str()))
-                    }
                     Ok(TcpClient{
                         socket:socket_addr,
                         tcp:t
@@ -67,10 +63,10 @@ impl TcpClient {
                     Ok(s) => {
                         Ok(s.to_string())
                     },
-                    Err(e) => Err(RokitError::new_msg("TCP读取错误:".to_string() + e.to_string().as_str()))
+                    Err(e) => Err(RokitError::new_msg("TCP转码:".to_string() + e.to_string().as_str()))
                 } 
             },
-            Err(_) => Err(RokitError::new(true, "".to_string()))
+            Err(e) => Err(RokitError::new_msg("TCP读取错误:".to_string() + e.to_string().as_str()))
         }
     }
 

@@ -4,7 +4,10 @@ mod udp_server;
 mod udp_client;
 mod rokit_error;
 
+use std::sync::{Arc, Mutex};
+
 use chrono::Local;
+use rokit_error::RokitError;
 use tcp_client::TcpClient;
 use iced::{button, executor, scrollable, text_input,
     Align, Application, Button, Checkbox, Command, Column, Clipboard, Element, Font, Settings, HorizontalAlignment, 
@@ -23,6 +26,10 @@ const CLIENT_TCP_BUTTON_TEXT_CONNECT : &str = "TCP连接";
 const CLIENT_TCP_BUTTON_TEXT_DISCONNECT : &str = "TCP断开";
 const CLIENT_UDP_BUTTON_TEXT_CONNECT : &str = "UDP连接";
 const CLIENT_UDP_BUTTON_TEXT_DISCONNECT : &str = "UDP断开";
+
+struct TcpClientWrapper {
+    tcp_client:Option<TcpClient>
+}
 
 struct Rokit{
 
@@ -88,8 +95,16 @@ struct Rokit{
 
     scrollable_state:scrollable::State,
 
+    tcp_client_wrapper:Arc<Mutex<TcpClientWrapper>>
+}
 
-    tcp_client:Option<TcpClient>,
+impl Rokit {
+    async fn read_all(sockets: Arc<Mutex<TcpClientWrapper>>) -> Result<String, RokitError>{
+        match sockets.lock().unwrap().tcp_client {
+            Some(ref mut client) => client.read(),
+            None => Err(RokitError::new_msg("TCP未连接".to_string()))
+        }
+    }
 }
 
 struct Addr {
@@ -189,7 +204,8 @@ enum RokitMessage {
     ClientASCIIBufferTextInput(String),
     ClientSendButton,
     ClientASCIISendButton,
-    ReadAll
+
+    ReadTcpClient(Result<String, RokitError>),
     
 }
 
@@ -265,7 +281,7 @@ impl Application for Rokit {
 
                 scrollable_state: scrollable::State::new(),
 
-                tcp_client:None,
+                tcp_client_wrapper:Arc::new(Mutex::new(TcpClientWrapper { tcp_client: None })),
             }, 
             Command::none()
         )
@@ -279,56 +295,64 @@ impl Application for Rokit {
         match message {
             RokitMessage::ServerTCPIPTextInput(s) => {
                 self.server_tcp_ip_text_input = s;
+                Command::none()
             },
             RokitMessage::ServerTCPPortTextInput(s) => {
                 self.server_tcp_port_text_input = s;
+                Command::none()
             },
             RokitMessage::ServerTCPButton => {
                 self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_DISCONNECT);
+                Command::none()
             },
             RokitMessage::ServerUDPIPTextInput(s) => {
                 self.server_udp_ip_text_input = s;
+                Command::none()
             },
             RokitMessage::ServerUDPPortTextInput(s) => {
                 self.server_udp_port_text_input = s;
+                Command::none()
             },
             RokitMessage::ServerUDPButton => {
                 self.server_udp_button_text = String::from(SERVER_UDP_BUTTON_TEXT_DISCONNECT);
+                Command::none()
             },
 
             RokitMessage::ClientIPTextInput(s) => {
                 self.client_ip_text_input = s;
+                Command::none()
             },
             RokitMessage::ClientPortTextInput(s) => {
                 self.client_port_text_input = s;
+                Command::none()
             },
             RokitMessage::ClientTCPButton => {
-                match self.tcp_client {
+                let mut s = self.tcp_client_wrapper.lock().unwrap();
+                match s.tcp_client {
                     Some(ref mut client) => {
                         self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
                         match client.disconnect() {
                             Ok(_) => {},
                             Err(e) => {
-                                if e.ignore == false {
-                                    self.client_output_text += generate_log(e.msg).as_str();
-                                }
+                                self.client_output_text += generate_log(e.msg).as_str();
                             }
                         }
-                        self.tcp_client = None;
+                        self.tcp_client_wrapper.lock().unwrap().tcp_client = None;
                         self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
+                        Command::none()
                     },
                     None => {
-                        let tcp_client = TcpClient::connect(self.client_ip_text_input.clone(), self.client_port_text_input.clone());
-                        match tcp_client {
+                        let new_tcp_client = TcpClient::connect(self.client_ip_text_input.clone(), self.client_port_text_input.clone());
+                        match new_tcp_client {
                             Ok(c) => {
                                 self.client_output_text += generate_log(format!("已创建TCP:{} {}", c.socket.ip().to_string(), c.socket.port())).as_str();
-                                self.tcp_client = Some(c);
+                                s.tcp_client = Some(c);
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
+                                Command::perform(Rokit::read_all(self.tcp_client_wrapper.clone()), RokitMessage::ReadTcpClient)
                             },
                             Err(e) => {
-                                if e.ignore == false {
-                                    self.client_output_text += generate_log(e.msg).as_str();
-                                }
+                                self.client_output_text += generate_log(e.msg).as_str();
+                                Command::none()
                             }
                         }
                     }
@@ -336,6 +360,7 @@ impl Application for Rokit {
             },
             RokitMessage::ClientUDPButton => {
                 self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_DISCONNECT);
+                Command::none()
             },
             RokitMessage::AddrMessage(i, addr_message) => {
                 match self.addrs.get_mut(i) {
@@ -344,53 +369,59 @@ impl Application for Rokit {
                     },
                     None => {}
                 }
+                Command::none()
             },
             RokitMessage::ServerAllButton => {
                 for addr in self.addrs.iter_mut() {
                     addr.check_state = AddrState::Checked;
                 }
+                Command::none()
             },
             RokitMessage::ServerDisconnectButton => {
                 self.addrs.retain(|addr| addr.check_state==AddrState::Unchecked);
+                Command::none()
             },
             RokitMessage::ServerBufferTextInput(s) => {
                 self.server_buffer_text_input = s;
+                Command::none()
             },
             RokitMessage::ServerASCIIBufferTextInput(s) => {
                 self.server_ascii_buffer_text_input = s;
+                Command::none()
             },
             RokitMessage::ServerSendButton => {
                 println!("已发送{}", self.server_buffer_text_input);
+                Command::none()
             },
             RokitMessage::ServerASCIISendButton => {
                 println!("已发送{}", self.server_ascii_buffer_text_input);
+                Command::none()
             },
             RokitMessage::ClientBufferTextInput(s) => {
                 self.client_buffer_text_input = s;
+                Command::none()
             },
             RokitMessage::ClientASCIIBufferTextInput(s) => {
                 self.client_ascii_buffer_text_input = s;
+                Command::none()
             },
             RokitMessage::ClientSendButton => {
-                match self.tcp_client.as_mut() {
+                let mut s = self.tcp_client_wrapper.lock().unwrap();
+                match s.tcp_client.as_mut() {
                     Some(client) => {
                         match client.send(self.client_buffer_text_input.clone()) {
                             Ok(x) => self.client_output_text += generate_log(format!("已发送{}字节:{}", x, self.client_buffer_text_input)).as_str(),
                             Err(e) => {
-                                if e.ignore == false {
-                                    self.client_output_text += generate_log(e.msg).as_str();
-                                    self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
-                                    match client.disconnect() {
-                                        Ok(_) => {},
-                                        Err(e) => {
-                                            if e.ignore == false {
-                                                self.client_output_text += generate_log(e.msg).as_str();
-                                            }
-                                        }
+                                self.client_output_text += generate_log(e.msg).as_str();
+                                self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
+                                match client.disconnect() {
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        self.client_output_text += generate_log(e.msg).as_str();
                                     }
-                                    self.tcp_client = None;
-                                    self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                                 }
+                                s.tcp_client = None;
+                                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                             }
                         }
                     },
@@ -398,42 +429,40 @@ impl Application for Rokit {
                         self.client_output_text +=  generate_log("TCP客户端未连接".to_string()).as_str();
                     }
                 } 
+                Command::none()
             },
             RokitMessage::ClientASCIISendButton => {
                 println!("已发送{}", self.client_ascii_buffer_text_input);
+                Command::none()
             },
-            RokitMessage::ReadAll => {
-                match self.tcp_client.as_mut() {
-                    Some(client) => {
-                        match client.read() {
-                            Ok(x) => self.client_output_text += generate_log(format!("收到:{}", x)).as_str(),
-                            Err(e) => {
-                                if e.ignore == false {
-                                    self.client_output_text += generate_log(e.msg).as_str();
-                                    self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
-                                    match client.disconnect() {
-                                        Ok(_) => {},
-                                        Err(e) => {
-                                            if e.ignore == false {
-                                                self.client_output_text += generate_log(e.msg).as_str();
-                                            }
-                                        }
+            RokitMessage::ReadTcpClient(result) => {
+                match result {
+                    Ok(x) => {
+                        self.client_output_text += generate_log(format!("收到:{}", x)).as_str();
+                        Command::perform(Rokit::read_all(self.tcp_client_wrapper.clone()), RokitMessage::ReadTcpClient)
+                    }
+                    Err(e) => {
+                        self.client_output_text += generate_log(e.msg).as_str();
+                        let mut s = self.tcp_client_wrapper.lock().unwrap();
+                        match s.tcp_client.as_mut() {
+                            Some(client) => {
+                                self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
+                                match client.disconnect() {
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        self.client_output_text += generate_log(e.msg).as_str();
                                     }
-                                    self.tcp_client = None;
-                                    self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                                 }
-                            }
+                                s.tcp_client = None;
+                                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
+                            },
+                            None => {}
                         }
-                    },
-                    None => {}
-                } 
+                        Command::none()
+                    }
+                }
             }
         }
-        Command::none()
-    }
-
-    fn subscription(&self) -> iced::Subscription<Self::Message> {
-        time::every(std::time::Duration::from_millis(1000)).map(|_| RokitMessage::ReadAll)
     }
 
     fn view(&mut self) -> Element<Self::Message> {
