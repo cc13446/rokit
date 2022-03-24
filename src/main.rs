@@ -306,7 +306,14 @@ impl Application for Rokit {
                 match self.tcp_client {
                     Some(ref mut client) => {
                         self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
-                        client.disconnect();
+                        match client.disconnect() {
+                            Ok(_) => {},
+                            Err(e) => {
+                                if e.ignore == false {
+                                    self.client_output_text += generate_log(e.msg).as_str();
+                                }
+                            }
+                        }
                         self.tcp_client = None;
                         self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                     },
@@ -372,6 +379,17 @@ impl Application for Rokit {
                             Err(e) => {
                                 if e.ignore == false {
                                     self.client_output_text += generate_log(e.msg).as_str();
+                                    self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
+                                    match client.disconnect() {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            if e.ignore == false {
+                                                self.client_output_text += generate_log(e.msg).as_str();
+                                            }
+                                        }
+                                    }
+                                    self.tcp_client = None;
+                                    self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                                 }
                             }
                         }
@@ -392,6 +410,17 @@ impl Application for Rokit {
                             Err(e) => {
                                 if e.ignore == false {
                                     self.client_output_text += generate_log(e.msg).as_str();
+                                    self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
+                                    match client.disconnect() {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            if e.ignore == false {
+                                                self.client_output_text += generate_log(e.msg).as_str();
+                                            }
+                                        }
+                                    }
+                                    self.tcp_client = None;
+                                    self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                                 }
                             }
                         }

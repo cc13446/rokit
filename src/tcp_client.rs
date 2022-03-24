@@ -58,10 +58,15 @@ impl TcpClient {
     pub fn read(&mut self) -> Result<String, RokitError>{
         let mut buffer: [u8;1024]  = [0;1024];
         match self.tcp.read(&mut buffer) {
-            Ok(_) => {
+            Ok(x) => {
+                if x == 0 {
+                    return  Err(RokitError::new_msg(format!("TCP断开{} {}", self.socket.ip().to_string(), self.socket.port())));
+                }
                 let res = str::from_utf8(&buffer);
                 match res {
-                    Ok(s) => Ok(s.to_string()),
+                    Ok(s) => {
+                        Ok(s.to_string())
+                    },
                     Err(e) => Err(RokitError::new_msg("TCP读取错误:".to_string() + e.to_string().as_str()))
                 } 
             },
