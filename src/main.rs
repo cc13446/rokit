@@ -3,10 +3,12 @@ mod tcp_client;
 mod udp_server;
 mod udp_client;
 mod rokit_error;
+
+use chrono::Local;
 use tcp_client::TcpClient;
 use iced::{button, executor, scrollable, text_input,
     Align, Application, Button, Checkbox, Command, Column, Clipboard, Element, Font, Settings, HorizontalAlignment, 
-    Length, Row, Scrollable, Text, TextInput, VerticalAlignment};
+    Length, Row, Scrollable, Text, TextInput, VerticalAlignment, time};
 
 const FZFONT: Font = Font::External {
     name: "方正字体",
@@ -187,6 +189,7 @@ enum RokitMessage {
     ClientASCIIBufferTextInput(String),
     ClientSendButton,
     ClientASCIISendButton,
+    ReadAll
     
 }
 
@@ -313,9 +316,9 @@ impl Application for Rokit {
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
                             },
                             Err(e) => {
-                                self.client_output_text += "创建Socket错误:";
-                                self.client_output_text += e.msg.as_str();
-                                self.client_output_text += "\n";
+                                if e.ignore == false {
+                                    self.client_output_text += generate_log(e.msg).as_str();
+                                }
                             }
                         }
                     }
@@ -348,7 +351,6 @@ impl Application for Rokit {
             },
             RokitMessage::ServerSendButton => {
                 println!("已发送{}", self.server_buffer_text_input);
-                self.server_output_text += ("\n".to_string() + self.server_buffer_text_input.clone().as_str()).as_str();
             },
             RokitMessage::ServerASCIISendButton => {
                 println!("已发送{}", self.server_ascii_buffer_text_input);
@@ -363,20 +365,43 @@ impl Application for Rokit {
                 match self.tcp_client.as_mut() {
                     Some(client) => {
                         match client.send(self.client_buffer_text_input.clone()) {
-                            Ok(x) => self.client_output_text += format!("已发送{}字节:{}\n", x, self.client_buffer_text_input).as_str(),
-                            Err(e) => self.client_output_text += format!("TCP传输错误:{}\n", e.msg).as_str(),
+                            Ok(x) => self.client_output_text += generate_log(format!("已发送{}字节:{}", x, self.client_buffer_text_input)).as_str(),
+                            Err(e) => {
+                                if e.ignore == false {
+                                    self.client_output_text += generate_log(e.msg).as_str();
+                                }
+                            }
                         }
                     },
                     None => {
-                        self.client_output_text += "TCP客户端未连接\n";
+                        self.client_output_text +=  generate_log("TCP客户端未连接".to_string()).as_str();
                     }
                 } 
             },
             RokitMessage::ClientASCIISendButton => {
                 println!("已发送{}", self.client_ascii_buffer_text_input);
             },
+            RokitMessage::ReadAll => {
+                match self.tcp_client.as_mut() {
+                    Some(client) => {
+                        match client.read() {
+                            Ok(x) => self.client_output_text += generate_log(format!("收到:{}", x)).as_str(),
+                            Err(e) => {
+                                if e.ignore == false {
+                                    self.client_output_text += generate_log(e.msg).as_str();
+                                }
+                            }
+                        }
+                    },
+                    None => {}
+                } 
+            }
         }
         Command::none()
+    }
+
+    fn subscription(&self) -> iced::Subscription<Self::Message> {
+        time::every(std::time::Duration::from_millis(1000)).map(|_| RokitMessage::ReadAll)
     }
 
     fn view(&mut self) -> Element<Self::Message> {
@@ -669,6 +694,13 @@ impl Application for Rokit {
             .push(row)
             .into()
     }
+}
+
+fn generate_log(msg:String) -> String {
+
+    let fmt = "%Y-%m-%d %H:%M:%S";
+    let date_str = Local::now().format(fmt).to_string();
+    return date_str + " " + msg.as_str() + "\n";
 }
 
 fn generate_setting() -> Settings<()> {
