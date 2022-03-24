@@ -360,8 +360,17 @@ impl Application for Rokit {
                 self.client_ascii_buffer_text_input = s;
             },
             RokitMessage::ClientSendButton => {
-                println!("已发送{}", self.client_buffer_text_input);
-                self.client_output_text += ("\n".to_string() + self.client_buffer_text_input.clone().as_str()).as_str();
+                match self.tcp_client.as_mut() {
+                    Some(client) => {
+                        match client.send(self.client_buffer_text_input.clone()) {
+                            Ok(x) => self.client_output_text += format!("已发送{}字节:{}\n", x, self.client_buffer_text_input).as_str(),
+                            Err(e) => self.client_output_text += format!("TCP传输错误:{}\n", e.msg).as_str(),
+                        }
+                    },
+                    None => {
+                        self.client_output_text += "TCP客户端未连接\n";
+                    }
+                } 
             },
             RokitMessage::ClientASCIISendButton => {
                 println!("已发送{}", self.client_ascii_buffer_text_input)

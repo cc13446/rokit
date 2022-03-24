@@ -1,5 +1,5 @@
 use super::rokit_error::RokitError;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream}, io::Write};
 pub struct TcpClient {
     socket:SocketAddr,
     tcp:TcpStream
@@ -42,5 +42,12 @@ impl TcpClient {
         } else {
             Err(RokitError{msg:"IP地址格式错误".to_string() + ip.clone().as_str()})
         }
-    } 
+    }
+
+    pub fn send(&mut self, s:String) -> Result<u32, RokitError>{
+        match self.tcp.write(s.as_bytes()) {
+            Ok(x) => Ok(x as u32),
+            Err(e) => Err(RokitError{msg:e.to_string()})
+        }
+    }
 }
