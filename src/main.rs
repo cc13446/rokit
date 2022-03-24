@@ -1,5 +1,9 @@
-mod server;
-mod client;
+mod tcp_server;
+mod tcp_client;
+mod udp_server;
+mod udp_client;
+mod rokit_error;
+use tcp_client::TcpClient;
 use iced::{button, executor, scrollable, text_input,
     Align, Application, Button, Checkbox, Command, Column, Clipboard, Element, Font, Settings, HorizontalAlignment, 
     Length, Row, Scrollable, Text, TextInput, VerticalAlignment};
@@ -81,13 +85,24 @@ struct Rokit{
     client_output_scrollable_state:scrollable::State,
 
     scrollable_state:scrollable::State,
+
+
+    tcp_client:Option<TcpClient>,
 }
 
 struct Addr {
     ip: String,
     port: String,
     describe: String, 
-    check_state: AddrState
+    check_state: AddrState,
+    category: AddrCategory
+
+}
+
+#[derive(PartialEq)]
+enum AddrCategory {
+    TCP,
+    UDP
 }
 
 #[derive(PartialEq)]
@@ -101,11 +116,20 @@ enum AddrMessage {
 }
 
 impl Addr {
-    fn new (ip:String, port:String) -> Self {
+    fn new (ip:String, port:String, category:AddrCategory) -> Self {
+        let c = match category {
+            AddrCategory::TCP => {
+                "TCP"
+            }
+            AddrCategory::UDP => {
+                "UDP"
+            }
+        };
         Addr{
-            describe:String::from(ip.clone() + " " + (port.clone().as_str())),
+            describe:String::from(ip.clone() + " " + (port.clone().as_str()) + " " + c),
             ip,
             port,
+            category,
             check_state:AddrState::Unchecked
         }
     }
@@ -198,10 +222,10 @@ impl Application for Rokit {
                 client_udp_button_text:String::from(CLIENT_UDP_BUTTON_TEXT_CONNECT),
                 client_udp_button_state: button::State::new(),
 
-                addrs:vec![Addr::new(String::from("127.0.0.1"), String::from("8888")), 
-                    Addr::new(String::from("127.0.0.1"), String::from("8878")),
-                    Addr::new(String::from("127.0.0.1"), String::from("8868")),
-                    Addr::new(String::from("127.0.0.1"), String::from("8858")),],
+                addrs:vec![Addr::new(String::from("127.0.0.1"), String::from("8888"), AddrCategory::TCP), 
+                    Addr::new(String::from("127.0.0.1"), String::from("8878"), AddrCategory::UDP),
+                    Addr::new(String::from("127.0.0.1"), String::from("8868"), AddrCategory::TCP),
+                    Addr::new(String::from("127.0.0.1"), String::from("8858"), AddrCategory::TCP),],
                
                 addrs_scrollable_state: scrollable::State::new(),
 
@@ -237,6 +261,8 @@ impl Application for Rokit {
                 client_output_scrollable_state:scrollable::State::new(),
 
                 scrollable_state: scrollable::State::new(),
+
+                tcp_client:None,
             }, 
             Command::none()
         )
@@ -274,7 +300,26 @@ impl Application for Rokit {
                 self.client_port_text_input = s;
             },
             RokitMessage::ClientTCPButton => {
-                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT)
+                match self.tcp_client {
+                    Some(ref _client) => {
+                        self.tcp_client = None;
+                        self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
+                    },
+                    None => {
+                        let tcp_client = TcpClient::connect(self.client_ip_text_input.clone(), self.client_port_text_input.clone());
+                        match tcp_client {
+                            Ok(c) => {
+                                self.tcp_client = Some(c);
+                                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT)
+                            },
+                            Err(e) => {
+                                self.client_output_text += "创建Socket错误:";
+                                self.client_output_text += e.msg.as_str();
+                                self.client_output_text += "\n";
+                            }
+                        }
+                    }
+                }
             },
             RokitMessage::ClientUDPButton => {
                 self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_DISCONNECT)
