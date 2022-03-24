@@ -304,7 +304,9 @@ impl Application for Rokit {
             },
             RokitMessage::ClientTCPButton => {
                 match self.tcp_client {
-                    Some(ref _client) => {
+                    Some(ref mut client) => {
+                        self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
+                        client.disconnect();
                         self.tcp_client = None;
                         self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
                     },
@@ -312,6 +314,7 @@ impl Application for Rokit {
                         let tcp_client = TcpClient::connect(self.client_ip_text_input.clone(), self.client_port_text_input.clone());
                         match tcp_client {
                             Ok(c) => {
+                                self.client_output_text += generate_log(format!("已创建TCP:{} {}", c.socket.ip().to_string(), c.socket.port())).as_str();
                                 self.tcp_client = Some(c);
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
                             },
@@ -698,7 +701,7 @@ impl Application for Rokit {
 
 fn generate_log(msg:String) -> String {
 
-    let fmt = "%Y-%m-%d %H:%M:%S";
+    let fmt = "%H:%M:%S";
     let date_str = Local::now().format(fmt).to_string();
     return date_str + " " + msg.as_str() + "\n";
 }
