@@ -53,7 +53,7 @@ impl TcpClient {
         match self.tcp_stream.read(&mut buffer) {
             Ok(x) => {
                 if x == 0 {
-                    return  Err(RokitError::new_msg(format!("TCP断开{} {}", self.socket_addr.ip().to_string(), self.socket_addr.port())));
+                    return  Err(RokitError::new_msg(format!("TCP断开:{} {}", self.socket_addr.ip().to_string(), self.socket_addr.port())));
                 }
                 let res = str::from_utf8(&buffer);
                 match res {

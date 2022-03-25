@@ -9,6 +9,7 @@ use tcp_client::TcpClient;
 use iced::{button, executor, scrollable, text_input,
     Align, Application, Button, Command, Column, Clipboard, Element, Font, Settings, HorizontalAlignment, 
     Length, Row, Scrollable, Text, TextInput, VerticalAlignment};
+use udp_client::{UdpClient, UdpClientReceive};
 
 const FZFONT: Font = Font::External {
     name: "方正字体",
@@ -47,13 +48,20 @@ struct Rokit{
 
     scrollable_state:scrollable::State,
 
-    tcp_client:Option<TcpClient>
+    tcp_client:Option<TcpClient>,
+    udp_client:Option<UdpClient>,
 }
 
 #[derive(Debug, Clone)]
 struct TcpClientResult {
     result:String,
     client:TcpClient
+}
+
+#[derive(Debug, Clone)]
+struct UdpClientResult {
+    result:UdpClientReceive,
+    client:UdpClient
 }
 
 #[derive(Debug, Clone)]
@@ -69,12 +77,20 @@ enum RokitMessage {
     ClientASCIISendButton,
 
     ReadTcpClient(Result<TcpClientResult, RokitError>),
+    ReadUdpClient(Result<UdpClientResult, RokitError>),
 }
 
 impl Rokit {
     async fn read_tcp_client(mut tcp_client: TcpClient) -> Result<TcpClientResult, RokitError>{
         match tcp_client.read() {
             Ok(s) => Ok(TcpClientResult{client:tcp_client, result:s}),
+            Err(e) => Err(e)
+        }
+    }
+
+    async fn read_udp_client(mut udp_client: UdpClient) -> Result<UdpClientResult, RokitError>{
+        match udp_client.read() {
+            Ok(s) => Ok(UdpClientResult{client:udp_client, result:s}),
             Err(e) => Err(e)
         }
     }
@@ -114,6 +130,7 @@ impl Application for Rokit {
                 scrollable_state: scrollable::State::new(),
 
                 tcp_client:None,
+                udp_client:None,
 
             }, 
             Command::none()
@@ -149,14 +166,22 @@ impl Application for Rokit {
                         Command::none()
                     },
                     None => {
+                        match self.udp_client {
+                            Some(ref mut udp_client) => {
+                                udp_client.close();
+                                self.udp_client = None;
+                                self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_CONNECT);
+                            },
+                            None => {}
+                        }
                         let new_tcp_client = TcpClient::connect(self.client_ip_text_input.clone(), self.client_port_text_input.clone());
                         match new_tcp_client {
-                            Ok(c) => {
-                                let cl = c.clone();
-                                self.client_output_text += generate_log(format!("TCP连接:{} {}", c.socket_addr.ip().to_string(), c.socket_addr.port())).as_str();
-                                self.tcp_client = Some(c);
+                            Ok(tcp_client) => {
+                                let tcp_client_clone = tcp_client.clone();
+                                self.client_output_text += generate_log(format!("TCP连接:{} {}", tcp_client.socket_addr.ip().to_string(), tcp_client.socket_addr.port())).as_str();
+                                self.tcp_client = Some(tcp_client);
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
-                                Command::perform(Rokit::read_tcp_client(cl), RokitMessage::ReadTcpClient)
+                                Command::perform(Rokit::read_tcp_client(tcp_client_clone), RokitMessage::ReadTcpClient)
                             },
                             Err(e) => {
                                 self.client_output_text += generate_log(e.msg).as_str();
@@ -167,8 +192,43 @@ impl Application for Rokit {
                 }
             },
             RokitMessage::ClientUDPButton => {
-                self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_DISCONNECT);
-                Command::none()
+                match self.udp_client {
+                    Some(ref mut udp_client) => {
+                        udp_client.close();
+                        self.udp_client = None;
+                        self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_CONNECT);
+                        Command::none()
+                    },
+                    None => {
+                        match self.tcp_client {
+                            None => {},
+                            Some(ref mut tcp_client) => {
+                                match tcp_client.disconnect() {
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        self.client_output_text += generate_log(e.msg).as_str();
+                                    }
+                                }
+                                self.tcp_client = None;
+                                self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
+                            }
+                        }
+                        let new_udp_client = UdpClient::connect(self.client_ip_text_input.clone(), self.client_port_text_input.clone());
+                        match new_udp_client {
+                            Ok(udp_client) => {
+                                let udp_client_clone = udp_client.clone();
+                                self.client_output_text += generate_log(format!("UDP连接:{} {}", udp_client.socket_addr.ip().to_string(), udp_client.socket_addr.port())).as_str();
+                                self.udp_client = Some(udp_client);
+                                self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_DISCONNECT);
+                                Command::perform(Rokit::read_udp_client(udp_client_clone), RokitMessage::ReadUdpClient)
+                            },
+                            Err(e) => {
+                                self.client_output_text += generate_log(e.msg).as_str();
+                                Command::none()
+                            }
+                        }
+                    }
+                }
             },
 
             RokitMessage::ClientBufferTextInput(s) => {
@@ -180,10 +240,10 @@ impl Application for Rokit {
                 Command::none()
             },
             RokitMessage::ClientSendButton => {
-                match self.tcp_client.as_mut() {
-                    Some(client) => {
+                match self.tcp_client {
+                    Some(ref mut client) => {
                         match client.send(self.client_buffer_text_input.clone()) {
-                            Ok(x) => self.client_output_text += generate_log(format!("已发送{}字节:{}", x, self.client_buffer_text_input)).as_str(),
+                            Ok(x) => self.client_output_text += generate_log(format!("TCP已发送{}字节:{}", x, self.client_buffer_text_input)).as_str(),
                             Err(e) => {
                                 self.client_output_text += generate_log(e.msg).as_str();
                                 match client.disconnect() {
@@ -198,7 +258,22 @@ impl Application for Rokit {
                         }
                     },
                     None => {
-                        self.client_output_text +=  generate_log("TCP未连接".to_string()).as_str();
+                        match self.udp_client {
+                            Some(ref mut client) => {
+                                match client.send(self.client_buffer_text_input.clone()) {
+                                    Ok(x) => self.client_output_text += generate_log(format!("UDP已发送{}字节:{}", x, self.client_buffer_text_input)).as_str(),
+                                    Err(e) => {
+                                        self.client_output_text += generate_log(e.msg).as_str();
+                                        client.close();
+                                        self.udp_client = None;
+                                        self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_CONNECT);
+                                    }
+                                }
+                            },
+                            None => {
+                                self.client_output_text +=  generate_log("无连接".to_string()).as_str();
+                            }
+                        } 
                     }
                 } 
                 Command::none()
@@ -210,7 +285,7 @@ impl Application for Rokit {
             RokitMessage::ReadTcpClient(result) => {
                 match result {
                     Ok(x) => {
-                        self.client_output_text += generate_log(format!("收到:{}", x.result)).as_str();
+                        self.client_output_text += generate_log(format!("TCP收到:{}", x.result)).as_str();
                         match self.tcp_client{
                             Some(_) => {
                                 Command::perform(Rokit::read_tcp_client(x.client), RokitMessage::ReadTcpClient)
@@ -233,6 +308,34 @@ impl Application for Rokit {
                                 }
                                 self.tcp_client = None;
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_CONNECT);
+                            },
+                            None => {}
+                        }
+                        Command::none()
+                    }
+                }
+            },
+            RokitMessage::ReadUdpClient(result) => {
+                match result {
+                    Ok(x) => {
+                        self.client_output_text += generate_log(format!("UDP收到:{}", x.result.result)).as_str();
+                        match self.udp_client{
+                            Some(_) => {
+                                Command::perform(Rokit::read_udp_client(x.client), RokitMessage::ReadUdpClient)
+                            },
+                            None => {
+                                Command::none()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.client_output_text += generate_log(e.msg).as_str();
+
+                        match self.udp_client.as_mut() {
+                            Some(client) => {
+                                client.close();
+                                self.udp_client = None;
+                                self.client_udp_button_text = String::from(CLIENT_UDP_BUTTON_TEXT_CONNECT);
                             },
                             None => {}
                         }
