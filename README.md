@@ -1,2 +1,2 @@
 # rokit
-A Socket Server And Client
+A Socket Client
