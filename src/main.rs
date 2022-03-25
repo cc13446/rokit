@@ -328,7 +328,6 @@ impl Application for Rokit {
     
                 match self.tcp_client {
                     Some(ref mut client) => {
-                        self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
                         match client.disconnect() {
                             Ok(_) => {},
                             Err(e) => {
@@ -344,7 +343,7 @@ impl Application for Rokit {
                         match new_tcp_client {
                             Ok(c) => {
                                 let cl = c.clone();
-                                self.client_output_text += generate_log(format!("已创建TCP:{} {}", c.socket.ip().to_string(), c.socket.port())).as_str();
+                                self.client_output_text += generate_log(format!("TCP连接:{} {}", c.socket.ip().to_string(), c.socket.port())).as_str();
                                 self.tcp_client = Some(c);
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
                                 Command::perform(Rokit::read_tcp_client(cl), RokitMessage::ReadTcpClient)
@@ -411,7 +410,6 @@ impl Application for Rokit {
                             Ok(x) => self.client_output_text += generate_log(format!("已发送{}字节:{}", x, self.client_buffer_text_input)).as_str(),
                             Err(e) => {
                                 self.client_output_text += generate_log(e.msg).as_str();
-                                self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
                                 match client.disconnect() {
                                     Ok(_) => {},
                                     Err(e) => {
@@ -424,7 +422,7 @@ impl Application for Rokit {
                         }
                     },
                     None => {
-                        self.client_output_text +=  generate_log("TCP客户端未连接".to_string()).as_str();
+                        self.client_output_text +=  generate_log("TCP未连接".to_string()).as_str();
                     }
                 } 
                 Command::none()
@@ -451,7 +449,6 @@ impl Application for Rokit {
 
                         match self.tcp_client.as_mut() {
                             Some(client) => {
-                                self.client_output_text += generate_log(format!("已断开TCP:{} {}", client.socket.ip().to_string(), client.socket.port())).as_str();
                                 match client.disconnect() {
                                     Ok(_) => {},
                                     Err(e) => {
