@@ -441,7 +441,43 @@ impl Application for Rokit {
                 Command::none()
             },
             RokitMessage::ServerSendButton => {
-                println!("已发送{}", self.server_buffer_text_input);
+                match self.tcp_server {
+                    Some(ref mut tcp_server) => {
+                        let mut remove_index = Vec::new();
+                        for (i, addr) in self.addrs.iter().enumerate() {
+                            if addr.check_state == AddrState::Checked {
+                                match tcp_server.streams.lock().unwrap().get_mut(&addr.socket_addr) {
+                                    Some(tcp_client) => {
+                                        match tcp_client.send(self.server_buffer_text_input.clone()) {
+                                            Ok(i) => self.server_output_text +=  generate_log(format!("已发送{}字节:{}", i, self.server_buffer_text_input)).as_str(),
+                                            Err(e) => {
+                                                self.server_output_text +=  generate_log(e.msg).as_str();
+                                                match tcp_client.disconnect() {
+                                                    Ok(_) => {},
+                                                    Err(e) => {
+                                                        self.client_output_text += generate_log(e.msg).as_str();
+                                                    }
+                                                }
+                                                tcp_server.streams.lock().unwrap().remove(&addr.socket_addr);
+                                            },
+                                        }
+                                    },
+                                    None => {
+                                        self.server_output_text +=  generate_log(format!("TCP已断开:{} {}", addr.socket_addr.ip().to_string(), addr.socket_addr.port().to_string()).to_string()).as_str();
+                                        remove_index.push(i);
+                                    }
+                                }
+                            }
+                        }
+                        while !remove_index.is_empty() {
+                            self.addrs.remove(remove_index.pop().unwrap());
+                        }
+                    },
+                    None => {
+                        self.server_output_text +=  generate_log("TCP服务器无连接".to_string()).as_str();
+                    }
+                }
+            
                 Command::none()
             },
             RokitMessage::ServerASCIISendButton => {

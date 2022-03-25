@@ -1,6 +1,6 @@
 use crate::rokit_error::RokitError;
 use crate::common::parse_ip_port;
-use std::{net::{SocketAddr, TcpStream, Shutdown}, io::{Write, Read}, str};
+use std::{net::{SocketAddr, TcpStream, Shutdown}, io::{Write, Read}, str, time::Duration};
 #[derive(Debug)]
 pub struct TcpClient {
     pub socket_addr:SocketAddr,
@@ -21,6 +21,12 @@ impl TcpClient {
                 let tcp = TcpStream::connect(res);
                 match tcp {
                     Ok(t) => {
+                        match t.set_write_timeout(Some(Duration::from_millis(10))) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                return Err(RokitError::new_msg("TCP连接错误:".to_string() + e.to_string().as_str()))
+                            }
+                        }
                         Ok(TcpClient{
                             socket_addr:res,
                             tcp_stream:t

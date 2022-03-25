@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::rokit_error::RokitError;
 use crate::common::parse_ip_port;
@@ -45,6 +46,12 @@ impl TcpServer {
         let res = self.tcp_listener.accept();
         match res {
             Ok((tcp_stream, socket_addr)) => {
+                match tcp_stream.set_write_timeout(Some(Duration::from_millis(10))) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        return Err(RokitError::new_msg("TCP连接错误:".to_string() + e.to_string().as_str()))
+                    }
+                }
                 let tcp_client = TcpClient{tcp_stream, socket_addr};
                 self.streams.lock().unwrap().insert(socket_addr, tcp_client.clone());
                 Ok(tcp_client)
