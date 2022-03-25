@@ -318,8 +318,8 @@ impl Application for Rokit {
             },
             RokitMessage::ServerTCPButton => {
                 match self.tcp_server {
-                    Some(ref server) => {
-                        self.server_output_text += generate_log(format!("TCP监听停止:{} {}", server.socket.ip().to_string(), server.socket.port())).as_str();
+                    Some(ref mut server) => {
+                        server.close();
                         self.tcp_server = None;
                         self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_CONNECT);
                         Command::none()
@@ -329,7 +329,7 @@ impl Application for Rokit {
                         match new_tcp_server {
                             Ok(s) => {
                                 let server_clone = s.clone();
-                                self.server_output_text += generate_log(format!("TCP监听:{} {}", s.socket.ip().to_string(), s.socket.port())).as_str();
+                                self.server_output_text += generate_log(format!("TCP服务器开启:{} {}", s.socket.ip().to_string(), s.socket.port())).as_str();
                                 self.tcp_server = Some(s);
                                 self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_DISCONNECT);
                                 Command::perform(Rokit::accept_tcp_server(server_clone), RokitMessage::AcceptTcpServer)
@@ -349,7 +349,7 @@ impl Application for Rokit {
                         Command::batch(vec![Command::perform(Rokit::accept_tcp_server(r.tcp_server), RokitMessage::AcceptTcpServer)])
                     },
                     Err(e) => {
-                        self.server_output_text += generate_log(format!("TCP监听停止:{}", e.msg)).as_str();
+                        self.server_output_text += generate_log(e.msg).as_str();
                         self.tcp_server = None;
                         self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_CONNECT);
                         Command::none()
