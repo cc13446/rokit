@@ -28,3 +28,16 @@ pub fn parse_ip_port(ip:String, port:String) -> Result<SocketAddr, RokitError> {
         Err(RokitError::new_msg("IP地址格式错误:".to_string() + ip.clone().as_str()))
     }
 }
+
+pub fn ascii_to_utf_8(input:String) -> Result<String, RokitError> {
+    let split_input : Vec<&str> = input.as_str().split(",").collect();
+    let mut buffer : Vec<u8> = Vec::new();
+    for s in split_input {
+        let temp = s.parse::<u8>();
+        match temp {
+            Ok(x) => buffer.push(x),
+            Err(_) => return Err(RokitError::new_msg("用户输入错误, 格式为'65,66,67' => 'ABC'".to_string()))
+        }
+    }
+    Ok(String::from_iter(buffer.iter().map(|v| { *v as char })))
+}
