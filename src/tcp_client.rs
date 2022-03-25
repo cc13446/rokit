@@ -1,5 +1,6 @@
 use super::rokit_error::RokitError;
 use std::{net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, Shutdown}, io::{Write, Read}, str};
+#[derive(Debug)]
 pub struct TcpClient {
     pub socket:SocketAddr,
     tcp:TcpStream

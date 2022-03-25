@@ -90,13 +90,6 @@ struct Rokit{
 
     tcp_client:Option<TcpClient>
 }
-
-impl Rokit {
-    async fn read_tcp_client(mut s: TcpClient) -> Result<String, RokitError>{
-        s.read()
-    }
-}
-
 struct Addr {
     ip: String,
     port: String,
@@ -121,6 +114,45 @@ enum AddrState {
 enum AddrMessage {
     Click(bool)
 }
+
+#[derive(Debug, Clone)]
+enum RokitMessage {
+    ServerTCPIPTextInput(String),
+    ServerTCPPortTextInput(String),
+    ServerTCPButton,
+
+    ServerUDPIPTextInput(String),
+    ServerUDPPortTextInput(String),
+    ServerUDPButton,
+
+    ClientIPTextInput(String),
+    ClientPortTextInput(String),
+    ClientTCPButton,
+    ClientUDPButton,
+
+    AddrMessage(usize, AddrMessage),
+    ServerAllButton,
+    ServerDisconnectButton,
+
+    ServerBufferTextInput(String),
+    ServerASCIIBufferTextInput(String),
+    ServerSendButton,
+    ServerASCIISendButton,
+
+    ClientBufferTextInput(String),
+    ClientASCIIBufferTextInput(String),
+    ClientSendButton,
+    ClientASCIISendButton,
+
+    ReadTcpClient(Result<TcpClientResult, RokitError>),
+    
+}
+#[derive(Debug, Clone)]
+struct TcpClientResult {
+    result:String,
+    client:TcpClient
+}
+
 
 impl Addr {
     fn new (ip:String, port:String, category:AddrCategory) -> Self {
@@ -166,37 +198,13 @@ impl Addr {
 
 }
 
-#[derive(Debug, Clone)]
-enum RokitMessage {
-    ServerTCPIPTextInput(String),
-    ServerTCPPortTextInput(String),
-    ServerTCPButton,
-
-    ServerUDPIPTextInput(String),
-    ServerUDPPortTextInput(String),
-    ServerUDPButton,
-
-    ClientIPTextInput(String),
-    ClientPortTextInput(String),
-    ClientTCPButton,
-    ClientUDPButton,
-
-    AddrMessage(usize, AddrMessage),
-    ServerAllButton,
-    ServerDisconnectButton,
-
-    ServerBufferTextInput(String),
-    ServerASCIIBufferTextInput(String),
-    ServerSendButton,
-    ServerASCIISendButton,
-
-    ClientBufferTextInput(String),
-    ClientASCIIBufferTextInput(String),
-    ClientSendButton,
-    ClientASCIISendButton,
-
-    ReadTcpClient(Result<String, RokitError>),
-    
+impl Rokit {
+    async fn read_tcp_client(mut tcp_client: TcpClient) -> Result<TcpClientResult, RokitError>{
+        match tcp_client.read() {
+            Ok(s) => Ok(TcpClientResult{client:tcp_client, result:s}),
+            Err(e) => Err(e)
+        }
+    }
 }
 
 impl Application for Rokit {
@@ -428,10 +436,10 @@ impl Application for Rokit {
             RokitMessage::ReadTcpClient(result) => {
                 match result {
                     Ok(x) => {
-                        self.client_output_text += generate_log(format!("收到:{}", x)).as_str();
-                        match self.tcp_client.as_mut() {
-                            Some(client) => {
-                                Command::perform(Rokit::read_tcp_client(client.clone()), RokitMessage::ReadTcpClient)
+                        self.client_output_text += generate_log(format!("收到:{}", x.result)).as_str();
+                        match self.tcp_client{
+                            Some(_) => {
+                                Command::perform(Rokit::read_tcp_client(x.client), RokitMessage::ReadTcpClient)
                             },
                             None => {
                                 Command::none()
