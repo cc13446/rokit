@@ -3,12 +3,16 @@ mod tcp_client;
 mod udp_server;
 mod udp_client;
 mod rokit_error;
+mod common;
+use std::net::SocketAddr;
+
 use chrono::Local;
 use rokit_error::RokitError;
 use tcp_client::TcpClient;
 use iced::{button, executor, scrollable, text_input,
     Align, Application, Button, Checkbox, Command, Column, Clipboard, Element, Font, Settings, HorizontalAlignment, 
     Length, Row, Scrollable, Text, TextInput, VerticalAlignment};
+use tcp_server::TcpServer;
 
 const FZFONT: Font = Font::External {
     name: "方正字体",
@@ -88,11 +92,12 @@ struct Rokit{
 
     scrollable_state:scrollable::State,
 
-    tcp_client:Option<TcpClient>
+    tcp_client:Option<TcpClient>,
+
+    tcp_server:Option<TcpServer>,
 }
 struct Addr {
-    ip: String,
-    port: String,
+    socket_addr:SocketAddr,
     describe: String, 
     check_state: AddrState,
     category: AddrCategory
@@ -145,6 +150,8 @@ enum RokitMessage {
     ClientASCIISendButton,
 
     ReadTcpClient(Result<TcpClientResult, RokitError>),
+
+    AcceptTcpServer(Result<TcpServerAcceptResult, RokitError>),
     
 }
 #[derive(Debug, Clone)]
@@ -152,10 +159,15 @@ struct TcpClientResult {
     result:String,
     client:TcpClient
 }
+#[derive(Debug, Clone)]
+struct TcpServerAcceptResult {
+    tcp_server:TcpServer,
+    tcp_client:TcpClient
+}
 
 
 impl Addr {
-    fn new (ip:String, port:String, category:AddrCategory) -> Self {
+    fn new (socket_addr:SocketAddr, category:AddrCategory) -> Self {
         let c = match category {
             AddrCategory::TCP => {
                 "TCP"
@@ -165,9 +177,8 @@ impl Addr {
             }
         };
         Addr{
-            describe:String::from(ip.clone() + " " + (port.clone().as_str()) + " " + c),
-            ip,
-            port,
+            describe:String::from(socket_addr.ip().to_string() + " " + (socket_addr.port().to_string().as_str()) + " " + c),
+            socket_addr,
             category,
             check_state:AddrState::Unchecked
         }
@@ -205,6 +216,13 @@ impl Rokit {
             Err(e) => Err(e)
         }
     }
+
+    async fn accept_tcp_server(mut tcp_server:TcpServer) -> Result<TcpServerAcceptResult, RokitError> {
+        match tcp_server.accept() {
+            Ok(tcp_client) => Ok(TcpServerAcceptResult{tcp_server, tcp_client}),
+            Err(e) => Err(e)
+        }
+    }
 }
 
 impl Application for Rokit {
@@ -239,10 +257,7 @@ impl Application for Rokit {
                 client_udp_button_text:String::from(CLIENT_UDP_BUTTON_TEXT_CONNECT),
                 client_udp_button_state: button::State::new(),
 
-                addrs:vec![Addr::new(String::from("127.0.0.1"), String::from("8888"), AddrCategory::TCP), 
-                    Addr::new(String::from("127.0.0.1"), String::from("8878"), AddrCategory::UDP),
-                    Addr::new(String::from("127.0.0.1"), String::from("8868"), AddrCategory::TCP),
-                    Addr::new(String::from("127.0.0.1"), String::from("8858"), AddrCategory::TCP),],
+                addrs:vec![],
                
                 addrs_scrollable_state: scrollable::State::new(),
 
@@ -280,6 +295,8 @@ impl Application for Rokit {
                 scrollable_state: scrollable::State::new(),
 
                 tcp_client:None,
+
+                tcp_server:None,
             }, 
             Command::none()
         )
@@ -300,8 +317,44 @@ impl Application for Rokit {
                 Command::none()
             },
             RokitMessage::ServerTCPButton => {
-                self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_DISCONNECT);
-                Command::none()
+                match self.tcp_server {
+                    Some(ref server) => {
+                        self.server_output_text += generate_log(format!("TCP监听停止:{} {}", server.socket.ip().to_string(), server.socket.port())).as_str();
+                        self.tcp_server = None;
+                        self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_CONNECT);
+                        Command::none()
+                    },
+                    None => {
+                        let new_tcp_server = TcpServer::listen(self.server_tcp_ip_text_input.clone(), self.server_tcp_port_text_input.clone());
+                        match new_tcp_server {
+                            Ok(s) => {
+                                let server_clone = s.clone();
+                                self.server_output_text += generate_log(format!("TCP监听:{} {}", s.socket.ip().to_string(), s.socket.port())).as_str();
+                                self.tcp_server = Some(s);
+                                self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_DISCONNECT);
+                                Command::perform(Rokit::accept_tcp_server(server_clone), RokitMessage::AcceptTcpServer)
+                            },
+                            Err(e) => {
+                                self.server_output_text += generate_log(e.msg).as_str();
+                                Command::none()
+                            }
+                        }
+                    }
+                }
+            },
+            RokitMessage::AcceptTcpServer(res) => {
+                match res {
+                    Ok(r) => {
+                        self.addrs.push(Addr::new(r.tcp_client.socket_addr, AddrCategory::TCP));
+                        Command::batch(vec![Command::perform(Rokit::accept_tcp_server(r.tcp_server), RokitMessage::AcceptTcpServer)])
+                    },
+                    Err(e) => {
+                        self.server_output_text += generate_log(format!("TCP监听停止:{}", e.msg)).as_str();
+                        self.tcp_server = None;
+                        self.server_tcp_button_text = String::from(SERVER_TCP_BUTTON_TEXT_CONNECT);
+                        Command::none()
+                    }
+                }
             },
             RokitMessage::ServerUDPIPTextInput(s) => {
                 self.server_udp_ip_text_input = s;
@@ -343,7 +396,7 @@ impl Application for Rokit {
                         match new_tcp_client {
                             Ok(c) => {
                                 let cl = c.clone();
-                                self.client_output_text += generate_log(format!("TCP连接:{} {}", c.socket.ip().to_string(), c.socket.port())).as_str();
+                                self.client_output_text += generate_log(format!("TCP连接:{} {}", c.socket_addr.ip().to_string(), c.socket_addr.port())).as_str();
                                 self.tcp_client = Some(c);
                                 self.client_tcp_button_text = String::from(CLIENT_TCP_BUTTON_TEXT_DISCONNECT);
                                 Command::perform(Rokit::read_tcp_client(cl), RokitMessage::ReadTcpClient)
